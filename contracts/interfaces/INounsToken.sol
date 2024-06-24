@@ -11,4 +11,6 @@ interface INounsToken {
     function descriptor() external returns (INounsDescriptorArt);
 
     function seeder() external returns (INounsSeeder);
+
+    function transferFrom(address from, address to, uint256 nounId) external;
 }
