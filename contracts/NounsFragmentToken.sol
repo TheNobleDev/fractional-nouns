@@ -3,10 +3,10 @@ pragma solidity ^0.8.20;
 
 import '@openzeppelin/contracts/token/ERC721/ERC721.sol';
 import '@openzeppelin/contracts/access/Ownable.sol';
-import { INounsFragmentDescriptorMinimal } from './interfaces/INounsFragmentDescriptorMinimal.sol';
-import { INounsToken } from './interfaces/INounsToken.sol';
-import { INounsSeeder } from './external/nouns/interfaces/INounsSeeder.sol';
+import { INounsFragmentDescriptorMinimal } from './external/nouns/interfaces/INounsFragmentDescriptorMinimal.sol';
 import { INounsDescriptorMinimal } from './external/nouns/interfaces/INounsDescriptorMinimal.sol';
+import { INounsToken } from './external/nouns/interfaces/INounsToken.sol';
+import { INounsSeeder } from './external/nouns/interfaces/INounsSeeder.sol';
 import { IProxyRegistry } from './external/opensea/IProxyRegistry.sol';
 
 contract NounsFragmentToken is ERC721, Ownable {

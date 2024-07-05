@@ -4,7 +4,7 @@
 
 pragma solidity ^0.8.20;
 
-import { INounsArt } from '../external/nouns/interfaces/INounsArt.sol';
+import { INounsArt } from './INounsArt.sol';
 
 interface INounsDescriptorArt {
     function art() external returns (INounsArt);

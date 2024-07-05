@@ -7,7 +7,7 @@ pragma solidity ^0.8.20;
 import { Strings } from '@openzeppelin/contracts/utils/Strings.sol';
 import { INounsSeeder } from './external/nouns/interfaces/INounsSeeder.sol';
 import { ISVGRenderer } from './external/nouns/interfaces/ISVGRenderer.sol';
-import { INounsToken } from './interfaces/INounsToken.sol';
+import { INounsToken } from './external/nouns/interfaces/INounsToken.sol';
 import { INounsArt } from './external/nouns/interfaces/INounsArt.sol';
 import { Base64 } from 'base64-sol/base64.sol';
 

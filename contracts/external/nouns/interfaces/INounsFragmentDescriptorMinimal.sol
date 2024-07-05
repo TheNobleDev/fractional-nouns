@@ -4,7 +4,7 @@
 
 pragma solidity ^0.8.20;
 
-import { INounsSeeder } from '../external/nouns/interfaces/INounsSeeder.sol';
+import { INounsSeeder } from './INounsSeeder.sol';
 
 interface INounsFragmentDescriptorMinimal {
     function tokenURI(
