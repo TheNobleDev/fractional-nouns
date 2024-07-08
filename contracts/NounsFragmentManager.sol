@@ -103,6 +103,14 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         _redeemNouns(fragmentIds, fungibleTokenCount, msg.sender);
     }
 
+    function splitFragment(uint256 primaryFragmentId, uint256[] calldata targetFragmentSizes) external whenNotPaused {
+        _splitFragment(primaryFragmentId, targetFragmentSizes, msg.sender);
+    }
+
+    function combineFragments(uint256[] calldata fragmentSizes, uint256 fungibleTokenCount) external whenNotPaused {
+        _combineFragments(fragmentSizes, fungibleTokenCount, msg.sender);
+    }
+
     function castVote(uint256[] calldata fragmentIds, uint256 proposalId, uint8 support) external whenNotPaused {
         _castVote(fragmentIds, proposalId, support, msg.sender);
     }
@@ -188,6 +196,59 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         }
     }
 
+    function _splitFragment(uint256 primaryFragmentId, uint256[] calldata fragmentSizes, address to) internal {
+        if (block.number <= unlockBlockOf[primaryFragmentId]) {
+            revert FragmentNotUnlocked();
+        }
+
+        uint256 referenceSize = nounsFragmentToken.fragmentCountOf(primaryFragmentId);
+        uint256 totalSize;
+
+        if (fragmentSizes.length != 0) {
+            totalSize = fragmentSizes[0];
+            nounsFragmentToken.mint(to, fragmentSizes[0], primaryFragmentId);
+        }
+
+        // Can only burn after minting the 1st fragment with the same seed
+        nounsFragmentToken.burn(primaryFragmentId);
+
+        for (uint256 i = 1; i < fragmentSizes.length; ++i) {
+            totalSize += fragmentSizes[i];
+            nounsFragmentToken.mint(to, fragmentSizes[i]);
+        }
+
+        if (totalSize < referenceSize) {
+            nounsFungibleToken.mint(to, (referenceSize - totalSize) * 1e18);
+        }
+    }
+
+    function _combineFragments(uint256[] calldata fragmentIds, uint256 fungibleTokenCount, address to) internal {
+        uint256 totalSize;
+        if (fragmentIds.length != 0) {
+            totalSize = nounsFragmentToken.fragmentCountOf(fragmentIds[0]);
+        }
+
+        // Starting the loop from 1 as we cannot yet burn the 0th fragment
+        for (uint256 i = 1; i < fragmentIds.length; ++i) {
+            totalSize += nounsFragmentToken.fragmentCountOf(fragmentIds[i]);
+            nounsFragmentToken.burn(fragmentIds[i]);
+        }
+        totalSize += fungibleTokenCount / 1e18;
+        nounsFungibleToken.burn(to, fungibleTokenCount);
+
+        uint256 nounsCount = totalSize / FRAGMENTS_IN_A_NOUN;
+        if (nounsCount == 0 || totalSize % FRAGMENTS_IN_A_NOUN != 0) {
+            revert InvalidFragmentCount(totalSize);
+        }
+
+        if (fragmentIds.length != 0) {
+            nounsFragmentToken.mint(to, totalSize, fragmentIds[0]);
+            nounsFragmentToken.burn(fragmentIds[0]);
+        } else {
+            nounsFragmentToken.mint(to, totalSize);
+        }
+    }
+
     function _castVote(uint256[] calldata fragmentIds, uint256 proposalId, uint8 support, address holder) internal {
         NounsDAOTypes.ProposalState proposalState = nounsDaoProxy.state(proposalId);
 
@@ -261,7 +322,4 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
-    // TODO
-    // Add functions for (de)merging fragments, adding/removing erc20 to/from fragments
 }
