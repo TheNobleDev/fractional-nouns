@@ -43,14 +43,15 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     error ZeroInputSize();
     error InvalidSupport();
     error VotingPeriodEnded();
-    error DepositNotUnlocked();
+    error DepositNotAvailable();
+    error FragmentNotUnlocked();
     error CanOnlyVoteAgainstDuringObjectionPeriod();
     error InvalidFragmentCount(uint256 fragmentCount);
     error AlreadyVoted(uint256 fragmentId, uint256 proposalId);
     error FragmentSizeExceedsDeposit(uint256 fragmentSize, uint48 depositSize);
 
     event DepositNouns(uint256 depositId, uint48 availableFromBlock, uint256[] nounIds, address indexed to);
-    event RedeemNouns(uint256 nounsCount, address beneficiary);
+    event RedeemNouns(uint256 nounsCount, address to);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -110,7 +111,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     // Internal Functions
     // //////////////////
 
-    function _depositNouns(uint256[] calldata nounIds, address beneficiary) internal {
+    function _depositNouns(uint256[] calldata nounIds, address to) internal {
         uint256 numOfNouns = nounIds.length;
         if (numOfNouns == 0) {
             revert ZeroInputSize();
@@ -119,15 +120,15 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
             address vault = _fetchOrCreateVault(nounIds[i]); // seed the vault with nounId
             nounDepositedIn[vault] = nounIds[i];
             allVaults.push(vault);
-            nounsToken.transferFrom(beneficiary, vault, nounIds[i]);
+            nounsToken.transferFrom(to, vault, nounIds[i]);
         }
         totalNounsDeposited += numOfNouns;
         uint48 availableFromBlock = _computeLastVotingBlock(nounsDaoProxy.proposalCount());
         uint48 size = uint48(numOfNouns * FRAGMENTS_IN_A_NOUN);
         uint256 depositId = nounIds[0];
 
-        depositInfoOf[depositId] = DepositInfo(availableFromBlock, size, beneficiary);
-        emit DepositNouns(depositId, availableFromBlock, nounIds, beneficiary);
+        depositInfoOf[depositId] = DepositInfo(availableFromBlock, size, to);
+        emit DepositNouns(depositId, availableFromBlock, nounIds, to);
     }
 
     function _createFragments(uint256 depositId, uint256[] calldata fragmentSizes, address to) internal {
@@ -137,7 +138,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         }
 
         if (block.number <= uint256(info.availableFromBlock)) {
-            revert DepositNotUnlocked();
+            revert DepositNotAvailable();
         }
 
         uint256 totalSize;
@@ -158,30 +159,30 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         delete depositInfoOf[depositId];
     }
 
-    function _redeemNouns(uint256[] calldata fragmentIds, uint256 fungibleTokenCount, address beneficiary) internal {
+    function _redeemNouns(uint256[] calldata fragmentIds, uint256 fungibleTokenCount, address to) internal {
         uint256 totalSize;
         for (uint256 i; i < fragmentIds.length; ++i) {
             totalSize += nounsFragmentToken.fragmentCountOf(fragmentIds[i]);
             nounsFragmentToken.burn(fragmentIds[i]);
         }
         totalSize += fungibleTokenCount / 1e18;
-        nounsFungibleToken.burn(beneficiary, fungibleTokenCount);
+        nounsFungibleToken.burn(to, fungibleTokenCount);
 
         uint256 nounsCount = totalSize / FRAGMENTS_IN_A_NOUN;
         if (nounsCount == 0 || totalSize % FRAGMENTS_IN_A_NOUN != 0) {
             revert InvalidFragmentCount(totalSize);
         }
-        _transferNouns(nounsCount, beneficiary);
+        _transferNouns(nounsCount, to);
 
-        emit RedeemNouns(nounsCount, beneficiary);
+        emit RedeemNouns(nounsCount, to);
     }
 
-    function _transferNouns(uint256 nounsCount, address beneficiary) internal {
+    function _transferNouns(uint256 nounsCount, address to) internal {
         uint256 currentTotal = totalNounsDeposited;
         totalNounsDeposited = currentTotal - nounsCount;
         for (uint256 i = currentTotal; i > totalNounsDeposited; --i) {
             address vault = allVaults[i];
-            Vault(vault).transferNounWithdrawRefund(nounDepositedIn[vault], beneficiary);
+            Vault(vault).transferNounWithdrawRefund(nounDepositedIn[vault], to);
             allVaults.pop();
             delete nounDepositedIn[vault];
         }
