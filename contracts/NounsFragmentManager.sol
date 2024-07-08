@@ -224,13 +224,16 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
 
     function _combineFragments(uint256[] calldata fragmentIds, uint256 fungibleTokenCount, address to) internal {
         uint256 totalSize;
+        uint48 maxUnlockBlock;
         if (fragmentIds.length != 0) {
             totalSize = nounsFragmentToken.fragmentCountOf(fragmentIds[0]);
+            maxUnlockBlock = unlockBlockOf[fragmentIds[0]];
         }
 
         // Starting the loop from 1 as we cannot yet burn the 0th fragment
         for (uint256 i = 1; i < fragmentIds.length; ++i) {
             totalSize += nounsFragmentToken.fragmentCountOf(fragmentIds[i]);
+            maxUnlockBlock = uint48(_max(unlockBlockOf[fragmentIds[i]], maxUnlockBlock));
             nounsFragmentToken.burn(fragmentIds[i]);
         }
         totalSize += fungibleTokenCount / 1e18;
@@ -247,6 +250,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         } else {
             nounsFragmentToken.mint(to, totalSize);
         }
+        unlockBlockOf[nounsFragmentToken.nextTokenId() - 1] = maxUnlockBlock;
     }
 
     function _castVote(uint256[] calldata fragmentIds, uint256 proposalId, uint8 support, address holder) internal {

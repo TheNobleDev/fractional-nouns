@@ -124,6 +124,13 @@ contract NounsFragmentToken is ERC721, Ownable {
     }
 
     /**
+     * @notice The next token ID to be minted
+     */
+    function nextTokenId() public view returns (uint256) {
+        return _nextTokenId;
+    }
+
+    /**
      * @notice Mint a NounFT with `tokenId`, worth 'fragmentCount' fragments to the provided `to` address.
      */
     function _mintTo(address to, uint256 tokenId, uint256 fragmentCount) internal {
