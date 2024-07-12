@@ -31,6 +31,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     }
 
     address[] public allVaults;
+    mapping(uint256 => address) private _voterOf;
     mapping(uint256 => address) public vaultFor;
     mapping(uint256 => uint48) public unlockBlockOf;
     mapping(address => uint256) public nounDepositedIn;
@@ -52,6 +53,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
 
     event DepositNouns(uint256 depositId, uint48 availableFromBlock, uint256[] nounIds, address indexed to);
     event RedeemNouns(uint256 nounsCount, address to);
+    event VoteDelegated(uint256 fragmentId, address to);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -77,6 +79,14 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     }
 
     receive() external payable {}
+
+    function voterOf(uint256 fragmentId) public view returns (address) {
+        address voter = _voterOf[fragmentId];
+        if (voter == address(0)) {
+            return nounsFragmentToken.ownerOf(fragmentId);
+        }
+        return voter;
+    }
 
     function pause() external onlyOwner {
         _pause();
@@ -109,6 +119,10 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
 
     function combineFragments(uint256[] calldata fragmentSizes, uint256 fungibleTokenCount) external whenNotPaused {
         _combineFragments(fragmentSizes, fungibleTokenCount, msg.sender);
+    }
+
+    function delegateVote(uint256[] calldata fragmentIds, address to) external {
+        _delegateVote(fragmentIds, msg.sender, to);
     }
 
     function castVote(uint256[] calldata fragmentIds, uint256 proposalId, uint8 support) external whenNotPaused {
@@ -253,6 +267,16 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         unlockBlockOf[nounsFragmentToken.nextTokenId() - 1] = maxUnlockBlock;
     }
 
+    function _delegateVote(uint256[] calldata fragmentIds, address holder, address to) internal {
+        for (uint256 i; i < fragmentIds.length; ++i) {
+            if (nounsFragmentToken.ownerOf(fragmentIds[i]) != holder) {
+                revert Unauthorized();
+            }
+            _voterOf[fragmentIds[i]] = to;
+            emit VoteDelegated(fragmentIds[i], to);
+        }
+    }
+
     function _castVote(uint256[] calldata fragmentIds, uint256 proposalId, uint8 support, address holder) internal {
         NounsDAOTypes.ProposalState proposalState = nounsDaoProxy.state(proposalId);
 
@@ -270,7 +294,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         uint256 lastVotingBlock = _computeLastVotingBlock(proposalId);
         uint256 totalSize;
         for (uint256 i; i < fragmentIds.length; ++i) {
-            if (nounsFragmentToken.ownerOf(fragmentIds[i]) != holder) {
+            if (voterOf(fragmentIds[i]) != holder) {
                 revert Unauthorized();
             }
             if (hasVotedOn[fragmentIds[i]][proposalId]) {
