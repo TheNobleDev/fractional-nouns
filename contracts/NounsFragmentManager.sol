@@ -169,12 +169,10 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
             nounsFragmentToken.mint(to, fragmentSizes[i]);
         }
 
-        if (totalSize > info.size) {
-            revert FragmentSizeExceedsDeposit(totalSize, info.size);
-        }
-
         if (totalSize < info.size) {
             nounsFungibleToken.mint(to, (info.size - totalSize) * 1e18);
+        } else if (totalSize > info.size) {
+            revert FragmentSizeExceedsDeposit(totalSize, info.size);
         }
 
         // delete depositInfoOf depositId, so it may be deposited again in the future
@@ -233,6 +231,8 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
 
         if (totalSize < referenceSize) {
             nounsFungibleToken.mint(to, (referenceSize - totalSize) * 1e18);
+        } else if (totalSize > referenceSize) {
+            revert FragmentSizeExceedsDeposit(totalSize, uint48(referenceSize));
         }
     }
 
