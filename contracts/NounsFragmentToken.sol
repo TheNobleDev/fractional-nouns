@@ -32,6 +32,14 @@ contract NounsFragmentToken is ERC721, Ownable {
     event NounFTUpdated(uint256 tokenId, uint256 oldFragmentCount, uint256 newFragmentCount);
     event DescriptorUpdated(INounsFragmentDescriptorMinimal descriptor);
 
+    /**
+     * @notice Initializes the NounsFragmentToken contract
+     * @dev Sets up the ERC721 token with name and symbol, and initializes other contract dependencies
+     * @param initialOwner The address that will be granted the owner role
+     * @param _descriptor The address of the NounsFragmentDescriptor contract
+     * @param _nounsToken The address of the NounsToken contract
+     * @param _proxyRegistry The address of OpenSea's proxy registry
+     */
     constructor(
         address initialOwner,
         INounsFragmentDescriptorMinimal _descriptor,
@@ -44,8 +52,10 @@ contract NounsFragmentToken is ERC721, Ownable {
     }
 
     /**
-     * @notice Mint a token to the 'to' address, consisting of 'fragmentCount' fragments.
-     * @dev Only callable by the owner.
+     * @notice Mint a token to the 'to' address, consisting of 'fragmentCount' fragments
+     * @dev Only callable by the owner
+     * @param to The address that will receive the minted token
+     * @param fragmentCount The number of fragments the token represents
      */
     function mint(address to, uint256 fragmentCount) external onlyOwner {
         uint256 tokenId = _nextTokenId++;
@@ -54,8 +64,11 @@ contract NounsFragmentToken is ERC721, Ownable {
 
     /**
      * @notice Mint a token to the 'to' address, consisting of 'fragmentCount' fragments,
-     * using the seed from the provided 'tokenSeedToUse'.
-     * @dev Only callable by the owner.
+     * using the seed from the provided 'tokenSeedToUse'
+     * @dev Only callable by the owner
+     * @param to The address that will receive the minted token
+     * @param fragmentCount The number of fragments the token represents
+     * @param tokenSeedToUse The token ID whose seed should be used for this new token
      */
     function mint(address to, uint256 fragmentCount, uint256 tokenSeedToUse) external onlyOwner {
         uint256 tokenId = _nextTokenId++;
@@ -64,8 +77,9 @@ contract NounsFragmentToken is ERC721, Ownable {
     }
 
     /**
-     * @notice Burn a NounFT.
-     * @dev Only callable by the owner.
+     * @notice Burn a NounFT
+     * @dev Only callable by the owner
+     * @param tokenId The ID of the token to burn
      */
     function burn(uint256 tokenId) external onlyOwner {
         _burn(tokenId);
@@ -74,8 +88,10 @@ contract NounsFragmentToken is ERC721, Ownable {
     }
 
     /**
-     * @notice Update the fragment count of the provided 'tokenId' to 'newFragmentCount'.
-     * @dev Only callable by the owner.
+     * @notice Update the fragment count of the provided 'tokenId' to 'newFragmentCount'
+     * @dev Only callable by the owner
+     * @param tokenId The ID of the token to update
+     * @param newFragmentCount The new fragment count for the token
      */
     function updateFragmentCount(uint256 tokenId, uint256 newFragmentCount) external onlyOwner {
         uint256 currentFragmentCount = fragmentCountOf[tokenId];
@@ -85,8 +101,9 @@ contract NounsFragmentToken is ERC721, Ownable {
     }
 
     /**
-     * @notice Set the token URI descriptor.
-     * @dev Only callable by the owner.
+     * @notice Set the token URI descriptor
+     * @dev Only callable by the owner
+     * @param _descriptor The new descriptor contract address
      */
     function setDescriptor(INounsFragmentDescriptorMinimal _descriptor) external onlyOwner {
         descriptor = _descriptor;
@@ -95,7 +112,10 @@ contract NounsFragmentToken is ERC721, Ownable {
     }
 
     /**
-     * @notice Override isApprovedForAll to whitelist user's OpenSea proxy accounts to enable gas-less listings.
+     * @notice Override isApprovedForAll to whitelist user's OpenSea proxy accounts to enable gas-less listings
+     * @param owner The owner of the tokens
+     * @param operator The address of the operator to check
+     * @return bool Whether the operator is approved for all tokens of the owner
      */
     function isApprovedForAll(address owner, address operator) public view override returns (bool) {
         // Whitelist OpenSea proxy contract for easy trading.
@@ -106,8 +126,10 @@ contract NounsFragmentToken is ERC721, Ownable {
     }
 
     /**
-     * @notice A distinct Uniform Resource Identifier (URI) for a given asset.
-     * @dev See {IERC721Metadata-tokenURI}.
+     * @notice A distinct Uniform Resource Identifier (URI) for a given asset
+     * @dev See {IERC721Metadata-tokenURI}
+     * @param tokenId The ID of the token to get the URI for
+     * @return string The token URI
      */
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         _requireOwned(tokenId);
@@ -116,7 +138,9 @@ contract NounsFragmentToken is ERC721, Ownable {
 
     /**
      * @notice Similar to `tokenURI`, but always serves a base64 encoded data URI
-     * with the JSON contents directly inlined.
+     * with the JSON contents directly inlined
+     * @param tokenId The ID of the token to get the data URI for
+     * @return string The data URI for the token
      */
     function dataURI(uint256 tokenId) public view returns (string memory) {
         _requireOwned(tokenId);
@@ -125,13 +149,21 @@ contract NounsFragmentToken is ERC721, Ownable {
 
     /**
      * @notice The next token ID to be minted
+     * @return uint256 The next token ID
      */
     function nextTokenId() public view returns (uint256) {
         return _nextTokenId;
     }
 
+    // //////////////////
+    // Internal Functions
+    // //////////////////
+
     /**
-     * @notice Mint a NounFT with `tokenId`, worth 'fragmentCount' fragments to the provided `to` address.
+     * @notice Mint a NounFT with `tokenId`, worth 'fragmentCount' fragments to the provided `to` address
+     * @param to The address that will receive the minted token
+     * @param tokenId The ID of the token to mint
+     * @param fragmentCount The number of fragments the token represents
      */
     function _mintTo(address to, uint256 tokenId, uint256 fragmentCount) internal {
         INounsSeeder.Seed memory seed = seeds[tokenId] = nounsToken.seeder().generateSeed(
@@ -145,7 +177,11 @@ contract NounsFragmentToken is ERC721, Ownable {
     }
 
     /**
-     * @notice Mint a NounFT with `tokenId`, worth 'fragmentCount' fragments, using 'seed' to the provided `to` address.
+     * @notice Mint a NounFT with `tokenId`, worth 'fragmentCount' fragments, using 'seed' to the provided `to` address
+     * @param to The address that will receive the minted token
+     * @param tokenId The ID of the token to mint
+     * @param fragmentCount The number of fragments the token represents
+     * @param seedToUse The seed to use for this token
      */
     function _mintToUsingSeed(
         address to,

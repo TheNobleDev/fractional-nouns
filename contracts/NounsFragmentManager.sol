@@ -60,6 +60,16 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         _disableInitializers();
     }
 
+    /**
+     * @notice Initializes the NounsFragmentManager contract
+     * @param owner The address that will be granted the owner role
+     * @param _nounsToken The address of the NounsToken contract
+     * @param _nounsFragmentToken The address of the NounsFragmentToken contract
+     * @param _nounsToken The address of the NounsToken contract
+     * @param _nounsFragmentToken The address of the NounsFragmentToken contract
+     * @param _nounsFungibleToken The address of the NounsFungibleToken contract
+     * @param _nounsDaoProxy The address of the NounsDaoProxy contract
+     */
     function initialize(
         address owner,
         INounsToken _nounsToken,
@@ -78,8 +88,16 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         vaultImplementation = address(new Vault());
     }
 
+    /**
+     * @notice Fallback function to receive Ether
+     */
     receive() external payable {}
 
+    /**
+     * @notice Returns the voter address for a given fragment ID
+     * @param fragmentId The ID of the fragment
+     * @return The address of the voter
+     */
     function voterOf(uint256 fragmentId) public view returns (address) {
         address voter = _voterOf[fragmentId];
         if (voter == address(0)) {
@@ -88,43 +106,94 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         return voter;
     }
 
+    /**
+     * @notice Pauses the contract
+     * @dev Only callable by the owner
+     */
     function pause() external onlyOwner {
         _pause();
     }
 
+    /**
+     * @notice Unpauses the contract
+     * @dev Only callable by the owner
+     */
     function unpause() external onlyOwner {
         _unpause();
     }
 
+    /**
+     * @notice Withdraws all Eth from the contract
+     * @dev Only callable by the owner
+     * @param to The address to send the Ether to
+     * @return A boolean indicating whether the withdrawal was successful
+     */
     function withdrawEth(address payable to) external onlyOwner returns (bool) {
         (bool success, ) = to.call{ value: address(this).balance }('');
         return success;
     }
 
+    /**
+     * @notice Deposits Nouns tokens into the contract
+     * @param nounIds An array of Noun IDs to deposit
+     */
     function depositNouns(uint256[] calldata nounIds) external whenNotPaused {
         _depositNouns(nounIds, msg.sender);
     }
 
+    /**
+     * @notice Creates fragments from a deposit
+     * @param depositId The ID of the deposit
+     * @param fragmentSizes An array of fragment sizes to create
+     * If sum of fragmentSizes is less than deposit, ERC20 tokens are created
+     */
     function createFragments(uint256 depositId, uint256[] calldata fragmentSizes) external whenNotPaused {
         _createFragments(depositId, fragmentSizes, msg.sender);
     }
 
+    /**
+     * @notice Redeems Nouns tokens by burning fragments and ERC20 tokens
+     * @param fragmentIds An array of fragment IDs to burn
+     * @param fungibleTokenCount The amount of fungible tokens to burn
+     */
     function redeemNouns(uint256[] calldata fragmentIds, uint256 fungibleTokenCount) external whenNotPaused {
         _redeemNouns(fragmentIds, fungibleTokenCount, msg.sender);
     }
 
+    /**
+     * @notice Splits a fragment into smaller fragments and ERC20 tokens
+     * @param primaryFragmentId The ID of the fragment to split
+     * @param targetFragmentSizes An array of sizes for the new fragments
+     * If sum of targetFragmentSizes is less than primary, ERC20 tokens are created
+     */
     function splitFragment(uint256 primaryFragmentId, uint256[] calldata targetFragmentSizes) external whenNotPaused {
         _splitFragment(primaryFragmentId, targetFragmentSizes, msg.sender);
     }
 
+    /**
+     * @notice Combines multiple fragments, and ERC20 tokens into a single fragment
+     * @param fragmentSizes An array of fragment sizes to combine
+     * @param fungibleTokenCount The amount of fungible tokens to include
+     */
     function combineFragments(uint256[] calldata fragmentSizes, uint256 fungibleTokenCount) external whenNotPaused {
         _combineFragments(fragmentSizes, fungibleTokenCount, msg.sender);
     }
 
+    /**
+     * @notice Delegates voting power of fragments to another address
+     * @param fragmentIds An array of fragment IDs to delegate
+     * @param to The address to delegate voting power to
+     */
     function delegateVote(uint256[] calldata fragmentIds, address to) external {
         _delegateVote(fragmentIds, msg.sender, to);
     }
 
+    /**
+     * @notice Casts votes for a proposal using fragment voting power
+     * @param fragmentIds An array of fragment IDs to vote with
+     * @param proposalId The ID of the proposal to vote on
+     * @param support The voting position (0: Against, 1: For, 2: Abstain)
+     */
     function castVote(uint256[] calldata fragmentIds, uint256 proposalId, uint8 support) external whenNotPaused {
         _castVote(fragmentIds, proposalId, support, msg.sender);
     }
