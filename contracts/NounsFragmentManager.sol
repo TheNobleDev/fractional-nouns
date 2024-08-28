@@ -24,40 +24,62 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     NounsFungibleToken public nounsFungibleToken;
     INounsDaoProxy public nounsDaoProxy;
 
-    struct DepositInfo {
-        uint48 availableFromBlock;
-        uint48 size;
-        address to;
-    }
-
     address[] public allVaults;
-    mapping(uint256 => address) private _voterOf;
+
+    mapping(uint256 => address) private _voteOwnerOf;
+    mapping(uint256 => uint48) private _voteUnlockBlockOf;
+    mapping(uint256 => uint48) private _depositUnlockBlockOf;
+
     mapping(uint256 => address) public vaultFor;
-    mapping(uint256 => uint48) public unlockBlockOf;
     mapping(address => uint256) public nounDepositedIn;
     mapping(uint256 => uint256[3]) public voteCountFor;
     mapping(uint256 => uint256) public nextVoteIndexFor;
-    mapping(uint256 => DepositInfo) public depositInfoOf;
     mapping(uint256 => mapping(uint256 => bool)) public hasVotedOn;
 
     error Unauthorized();
     error ZeroInputSize();
     error InvalidSupport();
     error VotingPeriodEnded();
-    error DepositNotAvailable();
-    error FragmentNotUnlocked();
+    error DepositNotUnlocked(uint256 fragmentId);
+    error FragmentNotUnlocked(uint256 fragmentId);
     error CanOnlyVoteAgainstDuringObjectionPeriod();
     error InvalidFragmentCount(uint256 fragmentCount);
     error AlreadyVoted(uint256 fragmentId, uint256 proposalId);
     error FragmentSizeExceedsDeposit(uint256 fragmentSize, uint48 depositSize);
 
-    event DepositNouns(uint256 depositId, uint48 availableFromBlock, uint256[] nounIds, address indexed to);
+    event DepositNouns(uint256[] nounIds, uint256[] fragmentSizes, uint48 availableFromBlock, address indexed to);
     event RedeemNouns(uint256 nounsCount, address to);
     event VoteDelegated(uint256 fragmentId, address to);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
+    }
+
+    /**
+     * @notice Modifier to make function callable only when
+     * fragment has passed the deposit waiting period
+     * @param fragmentId Fragment ID to check for
+     */
+    modifier ensureDepositUnlocked(uint256 fragmentId) {
+        if (isDepositLocked(fragmentId)) {
+            revert DepositNotUnlocked(fragmentId);
+        }
+        _;
+    }
+
+    /**
+     * @notice Modifier to make function callable only when
+     * fragments have passed the deposit waiting period
+     * @param fragmentIds Fragment IDs to check for
+     */
+    modifier ensureDepositUnlockedMulti(uint256[] calldata fragmentIds) {
+        for (uint256 i; i < fragmentIds.length; ++i) {
+            if (isDepositLocked(fragmentIds[i])) {
+                revert DepositNotUnlocked(fragmentIds[i]);
+            }
+        }
+        _;
     }
 
     /**
@@ -94,16 +116,33 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     receive() external payable {}
 
     /**
-     * @notice Returns the voter address for a given fragment ID
+     * @notice Returns the vote power owner of address for a given fragment ID
      * @param fragmentId The ID of the fragment
      * @return The address of the voter
      */
-    function voterOf(uint256 fragmentId) public view returns (address) {
-        address voter = _voterOf[fragmentId];
+    function votePowerOwnerOf(uint256 fragmentId) public view returns (address) {
+        address voter = _voteOwnerOf[fragmentId];
         if (voter == address(0)) {
             return nounsFragmentToken.ownerOf(fragmentId);
         }
         return voter;
+    }
+
+    /**
+     * @notice Returns true if the fragment is currently locked on deposit
+     * Note: This is set as the last voting block of the latest proposal when this fragment was created
+     * @param fragmentId The ID of the fragment
+     */
+    function isDepositLocked(uint256 fragmentId) public view returns (bool) {
+        return (block.number <= _depositUnlockBlockOf[fragmentId]);
+    }
+
+    /**
+     * @notice Returns true if the fragment has voted on a proposal that is live
+     * @param fragmentId The ID of the fragment
+     */
+    function hasLiveVote(uint256 fragmentId) public view returns (bool) {
+        return (block.number <= _voteUnlockBlockOf[fragmentId]);
     }
 
     /**
@@ -136,19 +175,10 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     /**
      * @notice Deposits Nouns tokens into the contract
      * @param nounIds An array of Noun IDs to deposit
-     */
-    function depositNouns(uint256[] calldata nounIds) external whenNotPaused {
-        _depositNouns(nounIds, msg.sender);
-    }
-
-    /**
-     * @notice Creates fragments from a deposit
-     * @param depositId The ID of the deposit
      * @param fragmentSizes An array of fragment sizes to create
-     * If sum of fragmentSizes is less than deposit, ERC20 tokens are created
      */
-    function createFragments(uint256 depositId, uint256[] calldata fragmentSizes) external whenNotPaused {
-        _createFragments(depositId, fragmentSizes, msg.sender);
+    function depositNouns(uint256[] calldata nounIds, uint256[] calldata fragmentSizes) external whenNotPaused {
+        _depositNouns(nounIds, fragmentSizes, msg.sender);
     }
 
     /**
@@ -156,7 +186,10 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
      * @param fragmentIds An array of fragment IDs to burn
      * @param fungibleTokenCount The amount of fungible tokens to burn
      */
-    function redeemNouns(uint256[] calldata fragmentIds, uint256 fungibleTokenCount) external whenNotPaused {
+    function redeemNouns(
+        uint256[] calldata fragmentIds,
+        uint256 fungibleTokenCount
+    ) external whenNotPaused ensureDepositUnlockedMulti(fragmentIds) {
         _redeemNouns(fragmentIds, fungibleTokenCount, msg.sender);
     }
 
@@ -166,17 +199,23 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
      * @param targetFragmentSizes An array of sizes for the new fragments
      * If sum of targetFragmentSizes is less than primary, ERC20 tokens are created
      */
-    function splitFragment(uint256 primaryFragmentId, uint256[] calldata targetFragmentSizes) external whenNotPaused {
+    function splitFragment(
+        uint256 primaryFragmentId,
+        uint256[] calldata targetFragmentSizes
+    ) external whenNotPaused ensureDepositUnlocked(primaryFragmentId) {
         _splitFragment(primaryFragmentId, targetFragmentSizes, msg.sender);
     }
 
     /**
      * @notice Combines multiple fragments, and ERC20 tokens into a single fragment
-     * @param fragmentSizes An array of fragment sizes to combine
+     * @param fragmentIds An array of fragment IDs to combine
      * @param fungibleTokenCount The amount of fungible tokens to include
      */
-    function combineFragments(uint256[] calldata fragmentSizes, uint256 fungibleTokenCount) external whenNotPaused {
-        _combineFragments(fragmentSizes, fungibleTokenCount, msg.sender);
+    function combineFragments(
+        uint256[] calldata fragmentIds,
+        uint256 fungibleTokenCount
+    ) external whenNotPaused ensureDepositUnlockedMulti(fragmentIds) {
+        _combineFragments(fragmentIds, fungibleTokenCount, msg.sender);
     }
 
     /**
@@ -194,7 +233,11 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
      * @param proposalId The ID of the proposal to vote on
      * @param support The voting position (0: Against, 1: For, 2: Abstain)
      */
-    function castVote(uint256[] calldata fragmentIds, uint256 proposalId, uint8 support) external whenNotPaused {
+    function castVote(
+        uint256[] calldata fragmentIds,
+        uint256 proposalId,
+        uint8 support
+    ) external whenNotPaused ensureDepositUnlockedMulti(fragmentIds) {
         _castVote(fragmentIds, proposalId, support, msg.sender);
     }
 
@@ -202,7 +245,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     // Internal Functions
     // //////////////////
 
-    function _depositNouns(uint256[] calldata nounIds, address to) internal {
+    function _depositNouns(uint256[] calldata nounIds, uint256[] calldata fragmentSizes, address to) internal {
         uint256 numOfNouns = nounIds.length;
         if (numOfNouns == 0) {
             revert ZeroInputSize();
@@ -214,38 +257,23 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
             nounsToken.transferFrom(to, vault, nounIds[i]);
         }
         totalNounsDeposited += numOfNouns;
-        uint48 availableFromBlock = _computeLastVotingBlock(nounsDaoProxy.proposalCount());
-        uint48 size = uint48(numOfNouns * FRAGMENTS_IN_A_NOUN);
-        uint256 depositId = nounIds[0];
-
-        depositInfoOf[depositId] = DepositInfo(availableFromBlock, size, to);
-        emit DepositNouns(depositId, availableFromBlock, nounIds, to);
-    }
-
-    function _createFragments(uint256 depositId, uint256[] calldata fragmentSizes, address to) internal {
-        DepositInfo memory info = depositInfoOf[depositId];
-        if (to != info.to) {
-            revert Unauthorized();
-        }
-
-        if (block.number <= uint256(info.availableFromBlock)) {
-            revert DepositNotAvailable();
-        }
-
+        uint48 lastVotingBlock = _computeLastVotingBlock(nounsDaoProxy.proposalCount());
         uint256 totalSize;
+        uint256 nextFragmentId = nounsFragmentToken.nextTokenId();
         for (uint256 i; i < fragmentSizes.length; ++i) {
             totalSize += fragmentSizes[i];
+            _depositUnlockBlockOf[nextFragmentId++] = lastVotingBlock;
             nounsFragmentToken.mint(to, fragmentSizes[i]);
         }
 
-        if (totalSize < info.size) {
-            nounsFungibleToken.mint(to, (info.size - totalSize) * 1e18);
-        } else if (totalSize > info.size) {
-            revert FragmentSizeExceedsDeposit(totalSize, info.size);
+        uint48 depositSize = uint48(numOfNouns * FRAGMENTS_IN_A_NOUN);
+        if (totalSize < depositSize) {
+            nounsFungibleToken.mint(to, (depositSize - totalSize) * 1e18);
+        } else if (totalSize > depositSize) {
+            revert FragmentSizeExceedsDeposit(totalSize, depositSize);
         }
 
-        // delete depositInfoOf depositId, so it may be deposited again in the future
-        delete depositInfoOf[depositId];
+        emit DepositNouns(nounIds, fragmentSizes, lastVotingBlock, to);
     }
 
     function _redeemNouns(uint256[] calldata fragmentIds, uint256 fungibleTokenCount, address to) internal {
@@ -278,8 +306,8 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     }
 
     function _splitFragment(uint256 primaryFragmentId, uint256[] calldata fragmentSizes, address to) internal {
-        if (block.number <= unlockBlockOf[primaryFragmentId]) {
-            revert FragmentNotUnlocked();
+        if (hasLiveVote(primaryFragmentId)) {
+            revert FragmentNotUnlocked(primaryFragmentId);
         }
 
         uint256 referenceSize = nounsFragmentToken.fragmentCountOf(primaryFragmentId);
@@ -307,16 +335,16 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
 
     function _combineFragments(uint256[] calldata fragmentIds, uint256 fungibleTokenCount, address to) internal {
         uint256 totalSize;
-        uint48 maxUnlockBlock;
+        uint48 maxVoteUnlockBlock;
         if (fragmentIds.length != 0) {
             totalSize = nounsFragmentToken.fragmentCountOf(fragmentIds[0]);
-            maxUnlockBlock = unlockBlockOf[fragmentIds[0]];
+            maxVoteUnlockBlock = _voteUnlockBlockOf[fragmentIds[0]];
         }
 
         // Starting the loop from 1 as we cannot yet burn the 0th fragment
         for (uint256 i = 1; i < fragmentIds.length; ++i) {
             totalSize += nounsFragmentToken.fragmentCountOf(fragmentIds[i]);
-            maxUnlockBlock = uint48(_max(unlockBlockOf[fragmentIds[i]], maxUnlockBlock));
+            maxVoteUnlockBlock = uint48(_max(_voteUnlockBlockOf[fragmentIds[i]], maxVoteUnlockBlock));
             nounsFragmentToken.burn(fragmentIds[i]);
         }
         totalSize += fungibleTokenCount / 1e18;
@@ -333,7 +361,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         } else {
             nounsFragmentToken.mint(to, totalSize);
         }
-        unlockBlockOf[nounsFragmentToken.nextTokenId() - 1] = maxUnlockBlock;
+        _voteUnlockBlockOf[nounsFragmentToken.nextTokenId() - 1] = maxVoteUnlockBlock;
     }
 
     function _delegateVote(uint256[] calldata fragmentIds, address holder, address to) internal {
@@ -341,7 +369,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
             if (nounsFragmentToken.ownerOf(fragmentIds[i]) != holder) {
                 revert Unauthorized();
             }
-            _voterOf[fragmentIds[i]] = to;
+            _voteOwnerOf[fragmentIds[i]] = to;
             emit VoteDelegated(fragmentIds[i], to);
         }
     }
@@ -363,14 +391,14 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         uint256 lastVotingBlock = _computeLastVotingBlock(proposalId);
         uint256 totalSize;
         for (uint256 i; i < fragmentIds.length; ++i) {
-            if (voterOf(fragmentIds[i]) != holder) {
+            if (votePowerOwnerOf(fragmentIds[i]) != holder) {
                 revert Unauthorized();
             }
             if (hasVotedOn[fragmentIds[i]][proposalId]) {
                 revert AlreadyVoted(fragmentIds[i], proposalId);
             }
             hasVotedOn[fragmentIds[i]][proposalId] = true;
-            unlockBlockOf[fragmentIds[i]] = uint48(_max(lastVotingBlock, unlockBlockOf[fragmentIds[i]]));
+            _voteUnlockBlockOf[fragmentIds[i]] = uint48(_max(lastVotingBlock, _voteUnlockBlockOf[fragmentIds[i]]));
             totalSize += nounsFragmentToken.fragmentCountOf(fragmentIds[i]);
         }
 
