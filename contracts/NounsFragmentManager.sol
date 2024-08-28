@@ -16,7 +16,6 @@ import { NounsDAOTypes } from './external/nouns/interfaces/NounsDAOInterfaces.so
 
 contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
     uint256 public constant FRAGMENTS_IN_A_NOUN = 1_000_000;
-    uint256 public totalNounsDeposited;
     address public vaultImplementation;
 
     INounsToken public nounsToken;
@@ -38,7 +37,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
 
     error Unauthorized();
     error ZeroInputSize();
-    error InvalidSupport();
+    error InvalidInput(uint256 data);
     error VotingPeriodEnded();
     error DepositNotUnlocked(uint256 fragmentId);
     error FragmentNotUnlocked(uint256 fragmentId);
@@ -146,6 +145,18 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     }
 
     /**
+     * @notice Returns the ID of the Noun at the given position in the list of Vaults
+     * @param position The position to query
+     * @return The Id of the Noun at given position
+     */
+    function getNounIdAtPosition(uint256 position) public view returns (uint256) {
+        if (position >= allVaults.length) {
+            revert InvalidInput(position);
+        }
+        return nounDepositedIn[allVaults[position]];
+    }
+
+    /**
      * @notice Pauses the contract
      * @dev Only callable by the owner
      */
@@ -185,12 +196,16 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
      * @notice Redeems Nouns tokens by burning fragments and ERC20 tokens
      * @param fragmentIds An array of fragment IDs to burn
      * @param fungibleTokenCount The amount of fungible tokens to burn
+     * @param targetPositions The position of vaults to redeem Nouns from. Leave empty for default
+     *
+     * Warning: Redeeming a Noun from the middle of the stack may lead to inability to vote on some live proposals
      */
     function redeemNouns(
         uint256[] calldata fragmentIds,
-        uint256 fungibleTokenCount
+        uint256 fungibleTokenCount,
+        uint256[] calldata targetPositions
     ) external whenNotPaused ensureDepositUnlockedMulti(fragmentIds) {
-        _redeemNouns(fragmentIds, fungibleTokenCount, msg.sender);
+        _redeemNouns(fragmentIds, fungibleTokenCount, targetPositions, msg.sender);
     }
 
     /**
@@ -198,6 +213,8 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
      * @param primaryFragmentId The ID of the fragment to split
      * @param targetFragmentSizes An array of sizes for the new fragments
      * If sum of targetFragmentSizes is less than primary, ERC20 tokens are created
+     *
+     * Note: The first output fragment retains the art of the input fragment
      */
     function splitFragment(
         uint256 primaryFragmentId,
@@ -256,7 +273,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
             allVaults.push(vault);
             nounsToken.transferFrom(to, vault, nounIds[i]);
         }
-        totalNounsDeposited += numOfNouns;
+
         uint48 lastVotingBlock = _computeLastVotingBlock(nounsDaoProxy.proposalCount());
         uint256 totalSize;
         uint256 nextFragmentId = nounsFragmentToken.nextTokenId();
@@ -276,7 +293,12 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         emit DepositNouns(nounIds, fragmentSizes, lastVotingBlock, to);
     }
 
-    function _redeemNouns(uint256[] calldata fragmentIds, uint256 fungibleTokenCount, address to) internal {
+    function _redeemNouns(
+        uint256[] calldata fragmentIds,
+        uint256 fungibleTokenCount,
+        uint256[] calldata targetPositions,
+        address to
+    ) internal {
         uint256 totalSize;
         for (uint256 i; i < fragmentIds.length; ++i) {
             totalSize += nounsFragmentToken.fragmentCountOf(fragmentIds[i]);
@@ -289,15 +311,35 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         if (nounsCount == 0 || totalSize % FRAGMENTS_IN_A_NOUN != 0) {
             revert InvalidFragmentCount(totalSize);
         }
+        if (nounsCount != targetPositions.length) {
+            revert InvalidInput(nounsCount);
+        }
+        if (targetPositions.length != 0) {
+            _bubbleUpTargetNouns(targetPositions);
+        }
         _transferNouns(nounsCount, to);
 
         emit RedeemNouns(nounsCount, to);
     }
 
+    function _bubbleUpTargetNouns(uint256[] calldata targetPositions) internal {
+        uint256 swapCount = targetPositions.length;
+        uint256 currentTotal = allVaults.length;
+        for (uint256 i; i < swapCount; i++) {
+            if (targetPositions[i] >= currentTotal) {
+                revert InvalidInput(targetPositions[i]);
+            }
+            // Swap the vault at target position with the one at the end
+            (allVaults[targetPositions[i]], allVaults[currentTotal - 1 - i]) = (
+                allVaults[currentTotal - 1 - i],
+                allVaults[targetPositions[i]]
+            );
+        }
+    }
+
     function _transferNouns(uint256 nounsCount, address to) internal {
-        uint256 currentTotal = totalNounsDeposited;
-        totalNounsDeposited = currentTotal - nounsCount;
-        for (uint256 i = currentTotal; i > totalNounsDeposited; --i) {
+        uint256 newTotal = allVaults.length - nounsCount;
+        for (uint256 i = allVaults.length; i > newTotal; --i) {
             address vault = allVaults[i];
             Vault(vault).transferNounWithdrawRefund(nounDepositedIn[vault], to);
             allVaults.pop();
@@ -378,7 +420,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         NounsDAOTypes.ProposalState proposalState = nounsDaoProxy.state(proposalId);
 
         if (support > 2) {
-            revert InvalidSupport();
+            revert InvalidInput(uint256(support));
         }
 
         if (proposalState != NounsDAOTypes.ProposalState.Active) {
