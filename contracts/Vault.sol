@@ -31,17 +31,13 @@ contract Vault {
         nounsDaoProxy = _nounsDaoProxy;
     }
 
-    function castVote(uint256 proposalId, uint8 support) external onlyOwner {
-        nounsDaoProxy.castRefundableVote(proposalId, support);
-    }
-
-    function castVote(uint256 proposalId, uint8 support, uint32 clientId) external onlyOwner {
+    function castVote(uint256 proposalId, uint8 support, uint32 clientId, address holder) external onlyOwner {
         nounsDaoProxy.castRefundableVote(proposalId, support, clientId);
+        (bool success, ) = payable(holder).call{ value: address(this).balance }('');
+        require(success, 'Failed to refund gas');
     }
 
-    function transferNounWithdrawRefund(uint256 nounId, address to) external onlyOwner returns (bool) {
+    function transferNoun(uint256 nounId, address to) external onlyOwner {
         nounsToken.transferFrom(address(this), to, nounId);
-        (bool success, ) = owner.call{ value: address(this).balance }('');
-        return success;
     }
 }

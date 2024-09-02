@@ -255,7 +255,23 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         uint256 proposalId,
         uint8 support
     ) external whenNotPaused ensureDepositUnlockedMulti(fragmentIds) {
-        _castVote(fragmentIds, proposalId, support, msg.sender);
+        _castVote(fragmentIds, proposalId, support, msg.sender, 0);
+    }
+
+    /**
+     * @notice Casts votes for a proposal using fragment voting power
+     * @param fragmentIds An array of fragment IDs to vote with
+     * @param proposalId The ID of the proposal to vote on
+     * @param support The voting position (0: Against, 1: For, 2: Abstain)
+     * @param clientId The ID of the client that faciliated posting the vote onchain
+     */
+    function castVote(
+        uint256[] calldata fragmentIds,
+        uint256 proposalId,
+        uint8 support,
+        uint32 clientId
+    ) external whenNotPaused ensureDepositUnlockedMulti(fragmentIds) {
+        _castVote(fragmentIds, proposalId, support, msg.sender, clientId);
     }
 
     // //////////////////
@@ -341,7 +357,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         uint256 newTotal = allVaults.length - nounsCount;
         for (uint256 i = allVaults.length; i > newTotal; --i) {
             address vault = allVaults[i];
-            Vault(vault).transferNounWithdrawRefund(nounDepositedIn[vault], to);
+            Vault(vault).transferNoun(nounDepositedIn[vault], to);
             allVaults.pop();
             delete nounDepositedIn[vault];
         }
@@ -416,7 +432,13 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         }
     }
 
-    function _castVote(uint256[] calldata fragmentIds, uint256 proposalId, uint8 support, address holder) internal {
+    function _castVote(
+        uint256[] calldata fragmentIds,
+        uint256 proposalId,
+        uint8 support,
+        address holder,
+        uint32 clientId
+    ) internal {
         NounsDAOTypes.ProposalState proposalState = nounsDaoProxy.state(proposalId);
 
         if (support > 2) {
@@ -451,17 +473,23 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
                 if (votes >= FRAGMENTS_IN_A_NOUN) {
                     uint256 fullVotes = votes / FRAGMENTS_IN_A_NOUN;
                     voteCountFor[proposalId][i] = votes % FRAGMENTS_IN_A_NOUN;
-                    _relayVotes(proposalId, fullVotes, i);
+                    _relayVotes(proposalId, fullVotes, i, clientId, holder);
                 }
                 break;
             }
         }
     }
 
-    function _relayVotes(uint256 proposalId, uint256 numOfNouns, uint8 support) internal {
+    function _relayVotes(
+        uint256 proposalId,
+        uint256 numOfNouns,
+        uint8 support,
+        uint32 clientId,
+        address holder
+    ) internal {
         uint256 startIndex = nextVoteIndexFor[proposalId];
         for (uint256 i = startIndex; i < startIndex + numOfNouns; ++i) {
-            Vault(allVaults[i]).castVote(proposalId, support);
+            Vault(allVaults[i]).castVote(proposalId, support, clientId, holder);
         }
         nextVoteIndexFor[proposalId] = startIndex + numOfNouns;
     }
