@@ -42,7 +42,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     error DepositNotUnlocked(uint256 fragmentId);
     error FragmentNotUnlocked(uint256 fragmentId);
     error CanOnlyVoteAgainstDuringObjectionPeriod();
-    error InvalidFragmentCount(uint256 fragmentCount);
+    error InvalidFragmentSize(uint256 size);
     error AlreadyVoted(uint256 fragmentId, uint256 proposalId);
     error FragmentSizeExceedsDeposit(uint256 fragmentSize, uint48 depositSize);
 
@@ -84,8 +84,6 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     /**
      * @notice Initializes the NounsFragmentManager contract
      * @param owner The address that will be granted the owner role
-     * @param _nounsToken The address of the NounsToken contract
-     * @param _nounsFragmentToken The address of the NounsFragmentToken contract
      * @param _nounsToken The address of the NounsToken contract
      * @param _nounsFragmentToken The address of the NounsFragmentToken contract
      * @param _nounsFungibleToken The address of the NounsFungibleToken contract
@@ -294,6 +292,9 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         uint256 totalSize;
         uint256 nextFragmentId = nounsFragmentToken.nextTokenId();
         for (uint256 i; i < fragmentSizes.length; ++i) {
+            if (fragmentSizes[i] >= FRAGMENTS_IN_A_NOUN) {
+                revert InvalidFragmentSize(fragmentSizes[i]);
+            }
             totalSize += fragmentSizes[i];
             _depositUnlockBlockOf[nextFragmentId++] = lastVotingBlock;
             nounsFragmentToken.mint(to, fragmentSizes[i]);
@@ -325,7 +326,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
 
         uint256 nounsCount = totalSize / FRAGMENTS_IN_A_NOUN;
         if (nounsCount == 0 || totalSize % FRAGMENTS_IN_A_NOUN != 0) {
-            revert InvalidFragmentCount(totalSize);
+            revert InvalidFragmentSize(totalSize);
         }
         if (nounsCount != targetPositions.length) {
             revert InvalidInput(nounsCount);
@@ -408,9 +409,9 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         totalSize += fungibleTokenCount / 1e18;
         nounsFungibleToken.burn(to, fungibleTokenCount);
 
-        uint256 nounsCount = totalSize / FRAGMENTS_IN_A_NOUN;
-        if (nounsCount == 0 || totalSize % FRAGMENTS_IN_A_NOUN != 0) {
-            revert InvalidFragmentCount(totalSize);
+        // Can only combine up to less than a single noun
+        if (totalSize >= FRAGMENTS_IN_A_NOUN) {
+            revert InvalidFragmentSize(totalSize);
         }
 
         if (fragmentIds.length != 0) {
