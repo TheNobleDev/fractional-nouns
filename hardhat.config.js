@@ -1,11 +1,12 @@
-require('@nomicfoundation/hardhat-toolbox');
-require('@openzeppelin/hardhat-upgrades');
-require('@nomicfoundation/hardhat-verify');
-require('dotenv').config();
+require("@nomicfoundation/hardhat-toolbox");
 
+/** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
-  defaultNetwork: 'sepolia',
+  defaultNetwork: "hardhat",
   networks: {
+    hardhat: {
+      blockGasLimit: 100000000429720
+    },
     sepolia: {
       url: process.env.SEPOLIA_URL || '',
       maxFeePerGas: 25 * 1e9, // 25 gwei
@@ -34,8 +35,9 @@ module.exports = {
     cache: './cache',
     artifacts: './artifacts',
   },
-  mocha: {
-    timeout: 40000,
+  gasReporter: {
+    enabled: process.env.REPORT_GAS !== undefined,
+    currency: "USD",
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
