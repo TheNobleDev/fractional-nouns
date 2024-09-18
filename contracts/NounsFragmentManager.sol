@@ -194,7 +194,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
      * @notice Redeems Nouns tokens by burning fragments and ERC20 tokens
      * @param fragmentIds An array of fragment IDs to burn
      * @param fungibleTokenCount The amount of fungible tokens to burn
-     * @param targetPositions The position of vaults to redeem Nouns from. Leave empty for default
+     * @param targetPositions The reverse-sorted positions of vaults to redeem from. Leave empty for default
      *
      * Warning: Redeeming a Noun from the middle of the stack may lead to inability to vote on some live proposals
      */
@@ -292,7 +292,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         uint256 totalSize;
         uint256 nextFragmentId = nounsFragmentToken.nextTokenId();
         for (uint256 i; i < fragmentSizes.length; ++i) {
-            if (fragmentSizes[i] >= FRAGMENTS_IN_A_NOUN) {
+            if (fragmentSizes[i] == 0 || fragmentSizes[i] >= FRAGMENTS_IN_A_NOUN) {
                 revert InvalidFragmentSize(fragmentSizes[i]);
             }
             totalSize += fragmentSizes[i];
@@ -328,11 +328,11 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         if (nounsCount == 0 || totalSize % FRAGMENTS_IN_A_NOUN != 0) {
             revert InvalidFragmentSize(totalSize);
         }
-        if (nounsCount != targetPositions.length) {
-            revert InvalidInput(nounsCount);
-        }
-        if (targetPositions.length != 0) {
+        if (targetPositions.length == 0) {
+            // default case: redeem from the end of the stack
             _bubbleUpTargetNouns(targetPositions);
+        } else if (nounsCount != targetPositions.length) {
+            revert InvalidInput(nounsCount);
         }
         _transferNouns(nounsCount, to);
 
@@ -344,6 +344,11 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         uint256 currentTotal = allVaults.length;
         for (uint256 i; i < swapCount; i++) {
             if (targetPositions[i] >= currentTotal) {
+                // target position must be within the bounds of the stack
+                revert InvalidInput(targetPositions[i]);
+            }
+            if (i != 0 && targetPositions[i] >= targetPositions[i - 1]) {
+                // only allow reverse sorted positions
                 revert InvalidInput(targetPositions[i]);
             }
             // Swap the vault at target position with the one at the end
@@ -373,6 +378,9 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         uint256 totalSize;
 
         if (fragmentSizes.length != 0) {
+            if (fragmentSizes[0] == 0) {
+                revert InvalidFragmentSize(0);
+            }
             totalSize = fragmentSizes[0];
             nounsFragmentToken.mint(to, fragmentSizes[0], primaryFragmentId);
         }
@@ -381,6 +389,9 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         nounsFragmentToken.burn(primaryFragmentId);
 
         for (uint256 i = 1; i < fragmentSizes.length; ++i) {
+            if (fragmentSizes[i] == 0) {
+                revert InvalidFragmentSize(fragmentSizes[i]);
+            }
             totalSize += fragmentSizes[i];
             nounsFragmentToken.mint(to, fragmentSizes[i]);
         }
