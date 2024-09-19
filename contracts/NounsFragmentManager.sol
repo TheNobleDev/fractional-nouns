@@ -14,6 +14,8 @@ import { INounsToken } from './external/nouns/interfaces/INounsToken.sol';
 import { INounsDaoProxy } from './external/nouns/interfaces/INounsDaoProxy.sol';
 import { NounsDAOTypes } from './external/nouns/interfaces/NounsDAOInterfaces.sol';
 
+import 'hardhat/console.sol';
+
 contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
     uint256 public constant FRAGMENTS_IN_A_NOUN = 1_000_000;
     address public vaultImplementation;
@@ -328,11 +330,11 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         if (nounsCount == 0 || totalSize % FRAGMENTS_IN_A_NOUN != 0) {
             revert InvalidFragmentSize(totalSize);
         }
-        if (targetPositions.length == 0) {
-            // default case: redeem from the end of the stack
+        if (targetPositions.length != 0) {
+            if (nounsCount != targetPositions.length) {
+                revert InvalidInput(targetPositions.length);
+            }
             _bubbleUpTargetNouns(targetPositions);
-        } else if (nounsCount != targetPositions.length) {
-            revert InvalidInput(nounsCount);
         }
         _transferNouns(nounsCount, to);
 
@@ -362,7 +364,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
     function _transferNouns(uint256 nounsCount, address to) internal {
         uint256 newTotal = allVaults.length - nounsCount;
         for (uint256 i = allVaults.length; i > newTotal; --i) {
-            address vault = allVaults[i];
+            address vault = allVaults[i - 1];
             Vault(vault).transferNoun(nounDepositedIn[vault], to);
             allVaults.pop();
             delete nounDepositedIn[vault];
@@ -421,7 +423,7 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         nounsFungibleToken.burn(to, fungibleTokenCount);
 
         // Can only combine up to less than a single noun
-        if (totalSize >= FRAGMENTS_IN_A_NOUN) {
+        if (totalSize == 0 || totalSize >= FRAGMENTS_IN_A_NOUN) {
             revert InvalidFragmentSize(totalSize);
         }
 
@@ -452,7 +454,6 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
         uint32 clientId
     ) internal {
         NounsDAOTypes.ProposalState proposalState = nounsDaoProxy.state(proposalId);
-
         if (support > 2) {
             revert InvalidInput(uint256(support));
         }
@@ -478,17 +479,11 @@ contract NounsFragmentManager is Initializable, PausableUpgradeable, OwnableUpgr
             totalSize += nounsFragmentToken.fragmentCountOf(fragmentIds[i]);
         }
 
-        for (uint8 i = 0; i <= 2; i++) {
-            uint256 votes = voteCountFor[proposalId][i];
-            if (i == support) {
-                votes += totalSize;
-                if (votes >= FRAGMENTS_IN_A_NOUN) {
-                    uint256 fullVotes = votes / FRAGMENTS_IN_A_NOUN;
-                    voteCountFor[proposalId][i] = votes % FRAGMENTS_IN_A_NOUN;
-                    _relayVotes(proposalId, fullVotes, i, clientId, holder);
-                }
-                break;
-            }
+        voteCountFor[proposalId][support] += totalSize;
+        if (voteCountFor[proposalId][support] >= FRAGMENTS_IN_A_NOUN) {
+            uint256 fullVotes = voteCountFor[proposalId][support] / FRAGMENTS_IN_A_NOUN;
+            voteCountFor[proposalId][support] = voteCountFor[proposalId][support] % FRAGMENTS_IN_A_NOUN;
+            _relayVotes(proposalId, fullVotes, support, clientId, holder);
         }
     }
 

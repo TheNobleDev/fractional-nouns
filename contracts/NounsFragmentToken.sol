@@ -64,16 +64,16 @@ contract NounsFragmentToken is ERC721, Ownable {
 
     /**
      * @notice Mint a token to the 'to' address, consisting of 'fragmentCount' fragments,
-     * using the seed from the provided 'tokenSeedToUse'
+     * using the seed from the provided 'tokenToUseForSeed'
      * @dev Only callable by the owner
      * @param to The address that will receive the minted token
      * @param fragmentCount The number of fragments the token represents
-     * @param tokenSeedToUse The token ID whose seed should be used for this new token
+     * @param tokenToUseForSeed The token ID whose seed should be used for this new token
      */
-    function mint(address to, uint256 fragmentCount, uint256 tokenSeedToUse) external onlyOwner {
+    function mint(address to, uint256 fragmentCount, uint256 tokenToUseForSeed) external onlyOwner {
         uint256 tokenId = _nextTokenId++;
-        _requireOwned(tokenSeedToUse);
-        _mintToUsingSeed(to, tokenId, fragmentCount, seeds[tokenSeedToUse]);
+        _requireOwned(tokenToUseForSeed);
+        _mintToUsingSeed(to, tokenId, fragmentCount, seeds[tokenToUseForSeed]);
     }
 
     /**
@@ -94,6 +94,7 @@ contract NounsFragmentToken is ERC721, Ownable {
      * @param newFragmentCount The new fragment count for the token
      */
     function updateFragmentCount(uint256 tokenId, uint256 newFragmentCount) external onlyOwner {
+        _requireOwned(tokenId);
         uint256 currentFragmentCount = fragmentCountOf[tokenId];
         fragmentCountOf[tokenId] = newFragmentCount;
 

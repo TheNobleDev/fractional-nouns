@@ -1,11 +1,12 @@
-require("@nomicfoundation/hardhat-toolbox");
+require('@nomicfoundation/hardhat-toolbox');
+require('@openzeppelin/hardhat-upgrades');
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
-  defaultNetwork: "hardhat",
+  defaultNetwork: 'hardhat',
   networks: {
     hardhat: {
-      blockGasLimit: 100000000429720
+      blockGasLimit: 275000001181730000000000,
     },
     sepolia: {
       url: process.env.SEPOLIA_URL || '',
@@ -37,7 +38,7 @@ module.exports = {
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
-    currency: "USD",
+    currency: 'USD',
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,

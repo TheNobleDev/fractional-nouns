@@ -12,9 +12,39 @@ This repository houses a set of smart contracts that enable proportional voting 
 
 - Medium Blog Post 2: [$⌐◧-◧: Smart Contract Design](https://medium.com/@NobleDev/smart-contract-design-535d45132995)
 
-### Testnet Deployment
+## Quick start
 
-The contracts deployed on Sepolia testnet are:
+The first things you need to do are cloning this repository and installing its dependencies:
+
+```sh
+git clone https://github.com/TheNobleDev/fractional-nouns.git
+cd fractional-nouns
+npm install
+```
+
+Once installed, compile the code:
+
+```sh
+npx hardhat compile
+```
+
+Then, to run tests and check coverage:
+
+```sh
+npx hardhat coverage
+```
+
+Finally, to deploy the contracts:
+
+```sh
+npx hardhat run scripts/deploy.js --network <network of choice>
+```
+
+Note: You may have to edit the deploy script with the right dependency addresses
+
+## Testnet Deployment
+
+The contracts (old buggy version) deployed on Sepolia testnet are:
 
 - NounsFragmentToken: `0x661290d6f8c8490419cd5d92f01d507f402189c1`
 - NounsFungibleToken: `0x826595D1c7D3506c808263d28Fde788f4d140B0f`
